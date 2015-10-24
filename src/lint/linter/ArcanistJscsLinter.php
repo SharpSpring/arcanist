@@ -104,27 +104,28 @@ final class ArcanistJscsLinter extends ArcanistExternalLinter {
     $messages = array();
     foreach ($report_dom->getElementsByTagName('file') as $file) {
       foreach ($file->getElementsByTagName('error') as $error) {
+        switch ($error->getAttribute('severity')) {
+          case 'error':
+            $code = 'JSCS.E';
+            break;
+
+          case 'warning':
+            $code = 'JSCS.W';
+            break;
+
+          default:
+            $code = 'JSCS.A';
+            break;
+        }
+
         $message = new ArcanistLintMessage();
         $message->setPath($path);
         $message->setLine($error->getAttribute('line'));
         $message->setChar($error->getAttribute('column'));
-        $message->setCode('JSCS');
         $message->setName('JSCS');
         $message->setDescription($error->getAttribute('message'));
-
-        switch ($error->getAttribute('severity')) {
-          case 'error':
-            $message->setSeverity(ArcanistLintSeverity::SEVERITY_ERROR);
-            break;
-
-          case 'warning':
-            $message->setSeverity(ArcanistLintSeverity::SEVERITY_WARNING);
-            break;
-
-          default:
-            $message->setSeverity(ArcanistLintSeverity::SEVERITY_ADVICE);
-            break;
-        }
+        $message->setCode($code);
+        $message->setSeverity($this->getLintMessageSeverity($code));
 
         $messages[] = $message;
       }
@@ -133,17 +134,31 @@ final class ArcanistJscsLinter extends ArcanistExternalLinter {
     return $messages;
   }
 
+  protected function getDefaultMessageSeverity($code) {
+    if (preg_match('/^JSCS\\.E\\./', $code)) {
+      return ArcanistLintSeverity::SEVERITY_ERROR;
+    }
+
+    if (preg_match('/^JSCS\\.W\\./', $code)) {
+      return ArcanistLintSeverity::SEVERITY_WARNING;
+    }
+
+    return ArcanistLintSeverity::SEVERITY_ADVICE;
+  }
+
   protected function getLintCodeFromLinterConfigurationKey($code) {
+    if (!preg_match('/^JSCS\\.(E|W|A)/', $code)) {
+      throw new Exception(
+        pht(
+          "Invalid severity code '%s', should begin with 'JSCS.'.",
+          $code));
+    }
 
     // NOTE: We can't figure out which rule generated each message, so we
-    // can not customize severities.
+    // can not customize severities past error/warning/advice.
     //
     // See https://github.com/mdevils/node-jscs/issues/224
-
-    throw new Exception(
-      pht(
-        "JSCS does not currently support custom severity levels, because ".
-        "rules can't be identified from messages in output."));
+    return $code;
   }
 
 }
